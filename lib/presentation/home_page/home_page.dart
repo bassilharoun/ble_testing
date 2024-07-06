@@ -5,7 +5,9 @@ import 'package:ble_test/data/models/position_response.dart';
 import 'package:ble_test/data/services/api_service.dart';
 import 'package:ble_test/presentation/home_page/widgets/map_position.dart';
 import 'package:ble_test/presentation/result_screen/result_screen.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
@@ -19,6 +21,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   bool _scanStarted = false;
+  bool startInfiniteScan = false;
   final flutterReactiveBle = FlutterReactiveBle();
   late StreamSubscription<DiscoveredDevice> _scanStream;
   List<DiscoveredDevice> _devices = [];
@@ -43,7 +46,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _startScan() async {
+  Future<void> _startScan() async {
     await _requestPermissions();
 
     if (await Permission.location.isGranted) {
@@ -58,13 +61,40 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           if (!_devices.any((d) => d.id == device.id)) {
             if (device.name.toLowerCase().contains("beacon")) {
-              _devices.add(device);
+            _devices.add(device);
             }
           }
         });
       });
 
       _startScanTimeout();
+    } else {
+      print("Location permission not granted");
+    }
+  }
+
+  Future<void> _startInfiniteScan() async {
+    await _requestPermissions();
+
+    if (await Permission.location.isGranted) {
+      setState(() {
+        startInfiniteScan = true;
+        _devices.clear();
+      });
+
+      _lastDeviceCount = 0;
+      _scanStream =
+          flutterReactiveBle.scanForDevices(withServices: []).listen((device) {
+        setState(() {
+          if (!_devices.any((d) => d.id == device.id)) {
+            if (device.name.toLowerCase().contains("beacon")) {
+            _devices.add(device);
+            }
+          }
+        });
+      });
+
+      // _startScanTimeout();
     } else {
       print("Location permission not granted");
     }
@@ -86,56 +116,9 @@ class _HomePageState extends State<HomePage> {
     _scanTimeoutTimer?.cancel();
     setState(() {
       _scanStarted = false;
+      startInfiniteScan = false;
     });
   }
-
-  // void showResponseDialog(BuildContext context, PositionResponse response) {
-  //   String dialogContent;
-
-  //   if (response.errorMessage.isEmpty) {
-  //     dialogContent =
-  //         'Building ID: ${response.buildingId}\nLevel ID: ${response.levelId} \nX: ${response.x} \nY: ${response.y} \n ----------------------- \n "${nearby3BeaconsStrings}"';
-  //   } else {
-  //     dialogContent = response.errorMessage;
-  //   }
-
-  //   showDialog(
-  //     context: context,
-  //     builder: (BuildContext context) {
-  //       return AlertDialog(
-  //         title: Text('Position Response'),
-  //         content: Column(
-  //           mainAxisSize: MainAxisSize.min,
-  //           children: [
-  //             Text(dialogContent),
-  //             // if ((response.x < 3 && response.x > 0))
-  //             //   Stack(
-  //             //     children: [
-  //             //       MapScreen(3, response.y),
-  //             //     ],
-  //             //   )
-  //             // else if (response.x > 7.10 && response.x < 10.1)
-  //             //   MapScreen(7.10, response.y)
-  //             // else if (response.y < 3 && response.y > 0)
-  //             //   MapScreen(response.x, 3)
-  //             // else if (response.y > 4.15 && response.y < 7.15)
-  //             //   MapScreen(response.x, 4.15)
-  //             // else
-  //               // MapScreen(response.x, response.y)
-  //           ],
-  //         ),
-  //         actions: <Widget>[
-  //           TextButton(
-  //             child: Text('OK'),
-  //             onPressed: () {
-  //               Navigator.of(context).pop();
-  //             },
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
 
   @override
   void dispose() {
@@ -148,6 +131,9 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: Text("${beaconData.length} beacon in the queue"),
+      ),
       body: ListView.builder(
         itemCount: _devices.length,
         itemBuilder: (context, index) {
@@ -177,6 +163,64 @@ class _HomePageState extends State<HomePage> {
                 ),
                 onPressed: _startScan,
                 child: const Icon(Icons.search),
+              ),
+        startInfiniteScan
+            ? ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: _stopScan,
+                child: const Icon(Icons.stop),
+              )
+            : ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () async {
+                  beaconData = [];
+
+                  for (int i = 0; i < 25; i++) {
+                    for (int j = 0; j < 5; j++) {
+                      try {
+                        await _startInfiniteScan();
+                        await Future.delayed(Duration(seconds: 2));
+
+                        beaconData.addAll(_devices.map((beacon) {
+                          return {
+                            "UUID": beacon.id.toString(),
+                            "RSSI": beacon.rssi,
+                          };
+                        }).toList());
+
+                        // _stopScan();
+                        await Future.delayed(
+                            Duration(seconds: 3)); // Short delay between scans
+                        i++;
+                      } catch (e) {
+                        if (e.toString().contains("ScanFailure.unknown")) {
+                          await _handleThrottleError(e.toString());
+                          j--; // Retry the current iteration of the inner loop
+                        } else {
+                          throw e;
+                        }
+                      }
+                      if (startInfiniteScan == false) {
+                        _stopScan();
+                        break;
+                      }
+                    }
+                    if (startInfiniteScan == false) {
+                      _stopScan();
+                      break;
+                    }
+                    // Wait for the remainder of the 30-second period
+                    await Future.delayed(Duration(seconds: 20));
+                  }
+                  _stopScan();
+                },
+                child: const Icon(CupertinoIcons.infinite),
               ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(
@@ -295,5 +339,20 @@ class _HomePageState extends State<HomePage> {
         ),
       ],
     );
+  }
+
+  Future<void> _handleThrottleError(String message) async {
+    final pattern = RegExp(r'suggested retry date is (.+) GMT\+03:00');
+    final match = pattern.firstMatch(message);
+    if (match != null) {
+      final retryDateString = match.group(1)!;
+      final retryDate =
+          DateFormat("EEE MMM dd HH:mm:ss").parse(retryDateString, true);
+      final now = DateTime.now();
+      final delay = retryDate.difference(now).inMilliseconds;
+      if (delay > 0) {
+        await Future.delayed(Duration(milliseconds: delay));
+      }
+    }
   }
 }

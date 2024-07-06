@@ -41,6 +41,7 @@ dependencies:
   permission_handler:
   dio: ^5.4.3+1
   flutter_screenutil: ^5.9.3
+  intl: ^0.19.0
 
 
 dev_dependencies:
