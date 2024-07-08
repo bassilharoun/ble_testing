@@ -61,7 +61,7 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           if (!_devices.any((d) => d.id == device.id)) {
             if (device.name.toLowerCase().contains("beacon")) {
-            _devices.add(device);
+              _devices.add(device);
             }
           }
         });
@@ -86,11 +86,11 @@ class _HomePageState extends State<HomePage> {
       _scanStream =
           flutterReactiveBle.scanForDevices(withServices: []).listen((device) {
         setState(() {
-          if (!_devices.any((d) => d.id == device.id)) {
-            if (device.name.toLowerCase().contains("beacon")) {
+          // if (!_devices.any((d) => d.id == device.id)) {
+          if (device.name.toLowerCase().contains("beacon")) {
             _devices.add(device);
-            }
           }
+          // }
         });
       });
 
@@ -132,7 +132,7 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text("${beaconData.length} beacon in the queue"),
+        title: Text("${_devices.length} beacon in the queue"),
       ),
       body: ListView.builder(
         itemCount: _devices.length,
@@ -178,48 +178,51 @@ class _HomePageState extends State<HomePage> {
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
                 ),
-                onPressed: () async {
-                  beaconData = [];
+                onPressed: _startInfiniteScan
+                //  () async {
+                //   beaconData = [];
 
-                  for (int i = 0; i < 25; i++) {
-                    for (int j = 0; j < 5; j++) {
-                      try {
-                        await _startInfiniteScan();
-                        await Future.delayed(Duration(seconds: 2));
+                //   for (int i = 0; i < 25; i++) {
+                //     for (int j = 0; j < 5; j++) {
+                //       try {
+                //         await _startInfiniteScan();
+                //         await Future.delayed(Duration(seconds: 2));
 
-                        beaconData.addAll(_devices.map((beacon) {
-                          return {
-                            "UUID": beacon.id.toString(),
-                            "RSSI": beacon.rssi,
-                          };
-                        }).toList());
+                //         beaconData.addAll(_devices.map((beacon) {
+                //           return {
+                //             "UUID": beacon.id.toString(),
+                //             "RSSI": beacon.rssi,
+                //           };
+                //         }).toList());
+                //         print("$beaconData");
+                //         print(beaconData.length);
 
-                        // _stopScan();
-                        await Future.delayed(
-                            Duration(seconds: 3)); // Short delay between scans
-                        i++;
-                      } catch (e) {
-                        if (e.toString().contains("ScanFailure.unknown")) {
-                          await _handleThrottleError(e.toString());
-                          j--; // Retry the current iteration of the inner loop
-                        } else {
-                          throw e;
-                        }
-                      }
-                      if (startInfiniteScan == false) {
-                        _stopScan();
-                        break;
-                      }
-                    }
-                    if (startInfiniteScan == false) {
-                      _stopScan();
-                      break;
-                    }
-                    // Wait for the remainder of the 30-second period
-                    await Future.delayed(Duration(seconds: 20));
-                  }
-                  _stopScan();
-                },
+                //         // _stopScan();
+                //         await Future.delayed(
+                //             Duration(seconds: 3)); // Short delay between scans
+                //       } catch (e) {
+                //         if (e.toString().contains("ScanFailure.unknown")) {
+                //           await _handleThrottleError(e.toString());
+                //           j--; // Retry the current iteration of the inner loop
+                //         } else {
+                //           throw e;
+                //         }
+                //       }
+                //       if (startInfiniteScan == false) {
+                //         _stopScan();
+                //         break;
+                //       }
+                //     }
+                //     if (startInfiniteScan == false) {
+                //       _stopScan();
+                //       break;
+                //     }
+                //     // Wait for the remainder of the 30-second period
+                //     await Future.delayed(Duration(seconds: 20));
+                //   }
+                //   _stopScan();
+                // }
+                ,
                 child: const Icon(CupertinoIcons.infinite),
               ),
         ElevatedButton(
@@ -258,6 +261,7 @@ class _HomePageState extends State<HomePage> {
                   return "\n${beacon.name} , ${beacon.rssi}\n";
                 }).toList();
               }
+
               PositionResponse? myTmPosition = await ApiService()
                   .sendBeaconData(beaconData, "UnknownListByMac");
 
